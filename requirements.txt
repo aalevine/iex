@@ -1,8 +1,2 @@
-psycopg2
-datetime
-argparse
+psycopg2-binary
 requests
-logging
-json
-csv
-os

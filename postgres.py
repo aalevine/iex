@@ -12,7 +12,11 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 def connect_psql():
 
 	try:
+
 		conn = psycopg2.connect(
+			# dbname="'"+os.getenv('database')+"'",
+			# user="'"+os.getenv('user')+"'",
+			# password="'"+os.getenv('password')+"'",
 			dbname=os.environ['pg_database'],
 			user=os.environ['pg_user'],
 			password=os.environ['pg_password'],
