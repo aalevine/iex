@@ -33,7 +33,7 @@ How to get a copy of the IEX project up and running on your local machine.
 
 ### Running the Program
 
-Execute the `iex.py` file. 
+Execute the `app.py` file. 
 + There is an optional flag `-b` to perform a backfill:
     + Note: Your **first** execution should always include `-b` so the program knows to first create the tables (`company`, `prices`, `orders`).
     + With this flag, the program will drop (if necessary), (re)create, and backfill all three tables for the past two years.    
@@ -43,7 +43,7 @@ Execute the `iex.py` file.
 First time example run:
 
 ```
-python iex.py -b
+python app.py -b
 ```
 
 ### Ongoing Executions
@@ -56,5 +56,5 @@ env EDITOR=vim crontab -e
 Insert a new job (5am daily):
 
 ```
-0 5 * * * python <path_to_file>/iex.py
+0 5 * * * python <path_to_file>/app.py
 ```
