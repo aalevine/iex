@@ -1,8 +1,6 @@
-'''
-Fetch IEX data to populate tables: company, prices
-Takes optional argument --backfill
-	If true, drops, recreates, and backfills tables for the past 2 years of data
-'''
+"""
+Fetch IEX data to populate tables: company, prices, orders
+"""
 
 from postgres import cursor, execute_from_text, execute_from_file
 from psycopg2.extensions import AsIs
@@ -17,37 +15,47 @@ import os
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-root_dir = os.path.dirname(os.path.realpath(__file__))
+root_dir = os.path.dirname(os.path.realpath(__file__)) # Whatever the current directory is
 root_url = 'https://api.iextrading.com/1.0'
 
+# Read in flat file of stock codes
 stock_codes = []
 with open('{}/data/stock_codes.txt'.format(root_dir)) as f:
-    for code in csv.reader(f):
-        stock_codes.append(code[0])
+	for code in csv.reader(f):
+		stock_codes.append(code[0])
 
 
 def get_args():
-	# Command-line arguments to parse
-    parser = argparse.ArgumentParser()
+	"""
+	Parse command-line arguments
+	backfill argument is optional (default is False)
+	"""
+	parser = argparse.ArgumentParser()
 
-	# Backfill arg is optional
-    parser.add_argument(
-        '-b', 
-        '--backfill',
-        type=bool,
-        nargs='?',
-        const=True, # if no value specified after flag, set to True
-        default=False, # if no flag, default is False
-        help='Optional: Backfill the data 2 years? True/False. This will drop and re-create all IEX tables.'
+	parser.add_argument(
+		'-b', 
+		'--backfill',
+		type=bool,
+		nargs='?',
+		const=True, # if no value specified after flag, set to True
+		default=False, # if no flag, default is False
+		help='Optional: Backfill the data 2 years? True/False. This will drop and re-create all IEX tables.'
 	)
-    args = parser.parse_args()
+	args = parser.parse_args()
 
-    return args.backfill
+	return args.backfill
 
 
 def fetch_data(endpoint, backfill):
+	"""
+	Make the IEX API call and return the response as JSON
+
+	:param endpoint: the endpoint to call (e.g. 'company', 'chart')
+	:param backfill: perform backfill? (boolean)
+	"""
+
 	try:
-		# If Backfill arg is True, set range to 2y, otherwise, default (1m)
+		# If backfill arg is True, set data range to 2y, otherwise, default (1m)
 		range = '1m'
 		if backfill:
 			range = '2y'
@@ -62,12 +70,12 @@ def fetch_data(endpoint, backfill):
 
 		response = requests.get(call)
 
-		# Load response as JSON blob
-		json_data = json.loads(response.text)
-		json_keys = json_data.keys()
-
 		if response.status_code != 200:
 			logging.error('Non-200 status code: {}'.format(response.status_code))
+
+		# Load response as JSON
+		json_data = json.loads(response.text)
+		json_keys = json_data.keys()
 
 		# Make sure returned JSON is not empty
 		if len(json_keys) == 0:
@@ -81,7 +89,13 @@ def fetch_data(endpoint, backfill):
 
 
 def parse_company_data(backfill):
-	# Hit endpoint to populate company table
+	"""
+	Returns parsed JSON data for company table
+
+	:param backfill: perform backfill? (boolean)
+	"""
+
+	# Make the API call, using 'company' endpoint
 	json_data, json_keys = fetch_data(endpoint='company', backfill=backfill)
 
 	company_table = []
@@ -100,7 +114,13 @@ def parse_company_data(backfill):
 
 
 def parse_prices_data(backfill):
-	# Hit endpoint to populate prices table
+	"""
+	Returns parsed JSON data for prices table
+
+	:param backfill: perform backfill? (boolean)
+	"""
+
+	# Make the API call, using 'chart' endpoint
 	json_data, json_keys = fetch_data(endpoint='chart', backfill=backfill)
 
 	prices_table = []
@@ -117,33 +137,25 @@ def parse_prices_data(backfill):
 	return prices_table	
 
 
-def data_check_json(table):
-	'''
-	In the below function (json_to_postgres), we save the parsed JSON response as an unlogged Postgres table
-	This function makes sure this "staging" JSON table has data, i.e. the copy_expert function worked correctly
-	Note: the entire JSON blob should be stored in the field 'doc'
-	'''
-
-	query_check_length = 'SELECT LENGTH(doc::VARCHAR) FROM {}'.format(table)
-	json_char_length = execute_from_text(query_check_length, single_output=True)
-
-	if json_char_length != 0:
-		logging.info('JSON data successfully copied to {}. Char length: {}'.format(table, json_char_length))
-	else:
-		logging.error('No JSON data copied to {}. Char length: {}'.format(table, json_char_length))	
-
-
 def json_to_postgres(data, table):
+	"""
+	Write parsed JSON data to unlogged Postgres table 
+	Entire JSON blob will be copied to one record in the table
+	This format allows for subsequent parsing into final SQL table format (using json_populate_recordset)
 
-	# Write parsed JSON data to file
+	:param data: parsed JSON data from API call (e.g. for company, prices tables)
+	:param table: table name (string)
+	"""
+
+	# Write parsed JSON data to a local file
 	with open('{}/data/{}.json'.format(root_dir, table), 'w') as f:
-	    json.dump(data, f)
+		json.dump(data, f)
 
+	# Create an unlogged Postgres table to copy the local JSON file to. 
+	# Table has one column: doc
 	logging.info('Creating unlogged table to store JSON {} data...'.format(table))
 	staging_json_table = AsIs('staging.'+table+'_json')
 
-	# Create an unlogged Postgres table to copy the JSON data to
-	# Entire JSON blob will be copied to one field: doc
 	execute_from_text('''
 
 		DROP TABLE IF EXISTS {unlogged};
@@ -152,21 +164,34 @@ def json_to_postgres(data, table):
 
 		'''.format(unlogged=staging_json_table))
 
-	# Copy from JSON file to unlogged table
+	# Copy from local JSON file to unlogged table
 	with open('{}/data/{}.json'.format(root_dir, table), 'r') as f:  
-	    _, cur = cursor()
-	    logging.info('Copying JSON {} data into table...'.format(table))
-	    cur.copy_expert('COPY {} FROM STDIN'.format(staging_json_table), f)
+		_, cur = cursor()
 
-	# Make sure JSON table has data
-	data_check_json(staging_json_table)
+		logging.info('Copying JSON {} data into table...'.format(table))
+		cur.copy_expert('COPY {} FROM STDIN'.format(staging_json_table), f)
+
+	# Make sure new unlogged table has data
+	query_check_length = 'SELECT LENGTH(doc::VARCHAR) FROM {}'.format(staging_json_table)
+	json_char_length = execute_from_text(query_check_length, aggregate_output=True)
+
+	# Log success if the doc field is populated
+	if json_char_length != 0:
+		logging.info('JSON data successfully copied to {}. Char length: {}'.format(staging_json_table, json_char_length))
+	else:
+		logging.error('No JSON data copied to {}. Char length: {}'.format(staging_json_table, json_char_length))		
 
 
 def data_check_row_count(table):
-	# Make sure each staging and production table has data
+	"""
+	Make sure each staging and production table has data
+
+	:param table: table name (string)
+	"""
+
 	for schema in ['staging', 'public']:
 		query_row_count = 'SELECT COUNT(*) FROM {}.{}'.format(schema, table)
-		row_count = execute_from_text(query_row_count, single_output=True)
+		row_count = execute_from_text(query_row_count, aggregate_output=True)
 
 		if row_count != 0:
 			logging.info('Row count for {}.{}: {}'.format(schema, table, row_count))
@@ -174,24 +199,39 @@ def data_check_row_count(table):
 			logging.info('Table {}.{} is empty'.format(schema, table))	
 
 
-def load_table(table, backfill, new_data_field, json_data=None):
+def load_table(table, backfill, new_data_field, from_json_data=None):
+	"""
+	Loads each production table
+
+	If backfilling, drops and recreates the table
+	If not backfilling, logs the new values to be inserted
+	
+	:param table: table name (string)
+	:param backfill: perform backfill? (boolean)
+	:param new_data_filed: field to check for newly inserted records (e.g. 'date' for prices table, 
+		'stock_code' for company table)
+	:param from_json_data: parsed JSON data to load the table with (e.g. company, prices tables). 
+		The orders table is derived FROM the prices table, so it requires no JSON data processing
+	"""
+
 	# If backfilling, run the DDL script (to drop and recreate prod table)
 	if backfill:
 		execute_from_file(root_dir+'/sql/'+table+'_ddl.sql')
 	
-	if json_data != None:
-		# Copy JSON data to Postgres
-		json_to_postgres(json_data, table)
+	# If the table requires loading from JSON data, load it
+	if from_json_data != None:
+		# Write parsed JSON data to unlogged Postgres table 
+		json_to_postgres(from_json_data, table)
 
 	# Create staging table with data from latest request and insert into prod table
 	execute_from_file(root_dir+'/sql/'+table+'_insert.sql')
 
 	# Make sure staging and prod tables actually have data
-	# Staging table may not have data if there is nothing new to insert
+	# Note: staging table may not have data if there is nothing new to insert
 	data_check_row_count(table)
 
+	# If not backfilling, output the new values to be inserted from the current execution
 	if not backfill:
-		# Output the new values to be inserted from the current execution
 		new_data = execute_from_text('SELECT DISTINCT {} FROM staging.{}'.format(new_data_field, table), full_output=True)
 
 		# Format output
@@ -202,6 +242,7 @@ def load_table(table, backfill, new_data_field, json_data=None):
 		if len(new_data) == 0:
 			logging.info('No new data to insert into public.{}'.format(table))
 		else:
+			# Log the new stock codes or dates to be appended 
 			logging.info('New {} values inserted into public.{}: {}'.format(new_data_field, table, sorted(new_data_clean)))
 
 
@@ -210,27 +251,27 @@ def run():
 	backfill = get_args()
 	logging.info('Performing backfill? {}'.format(backfill))
 
-	logging.info('Loading compnay table...')
+	logging.info('Loading company table...')
 	load_table( 
 		'company', 
 		backfill,
-		'stock_code',
-		json_data=parse_company_data(backfill)
+		new_data_field='stock_code',
+		from_json_data=parse_company_data(backfill)
 	)
 
 	logging.info('Loading prices table...')
 	load_table(
 		'prices', 
 		backfill,
-		'date',
-		json_data=parse_prices_data(backfill)
+		new_data_field='date',
+		from_json_data=parse_prices_data(backfill)
 	)
 
 	logging.info('Loading orders table...')
 	load_table(
 		'orders',
 		backfill,
-		'date'
+		new_data_field='date'
 	)
 
 	logging.info('Dropping staging tables...')
