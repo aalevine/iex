@@ -18,17 +18,20 @@ How to get a copy of the IEX project up and running on your local machine.
 
 + Create a new database (or use the default, `postgres`) and specify your username and password.
 
-+ Save your Postgres database name, username, and password to your `.bash_profile`.
++ Save your Postgres database name, username, and password to your `~/.bash_profile`.
     ```
     export pg_database='postgres'
     export pg_user='austin'
     export pg_password='password'    
     ```
 
-+ Install the `psycopg2` library, which allows Python to connect to our PostgreSQL server.
-
++ Clone this repo, and create a virtualenv to download the necessary packages.
     ```
-    pip install psycopg2
+    cd path/to/repo/
+    virtualenv env
+    source env/bin/activate
+    pip install psycopg2 requests
+    deactivate
     ```
 
 ### Running the Program
@@ -43,6 +46,7 @@ Execute the `app.py` file.
 First time example run:
 
 ```
+source env/bin/activate
 python app.py -b
 ```
 
@@ -51,10 +55,10 @@ python app.py -b
 Set a cron job to run the program, say, once daily:
 
 ```
-env EDITOR=vim crontab -e
+env EDITOR=vim crontab -e   
 ```
-Insert a new job (5am daily):
+Insert a new job, while making variables from your .bash_profile available to cron:
 
 ```
-0 5 * * * . activate virtualenv-name && python <path_to_file>/app.py
+0 5 * * * . ~/.bash_profile; cd ~/path/to/repo/ && source env/bin/activate && python app.py
 ```
