@@ -56,5 +56,5 @@ env EDITOR=vim crontab -e
 Insert a new job (5am daily):
 
 ```
-0 5 * * * python <path_to_file>/app.py
+0 5 * * * . activate virtualenv-name && python <path_to_file>/app.py
 ```
