@@ -16,12 +16,15 @@ How to get a copy of the IEX project up and running on your local machine.
 
 + Download PostgreSQL on your local machine (e.g. using [Postgres.app](https://postgresapp.com/)).
 
-+ Create a new database (or use the default, `postgres`) and specify your username and password. Default username for `postgres` is `postgres`, with no password.
++ Use the default database, `postgres`, and note your username and password. Default username for `postgres` database is `postgres`, with no password. Note: you **must** create a password. To do so in psql:
+    ```
+    ALTER ROLE postgres PASSWORD 'password';
+    ```
 
-+ Save your Postgres database name, username, and password to your `~/.bash_profile`. If no password, omit the third line below.
++ Save your Postgres database name, username, and password to your `~/.bash_profile`. 
     ```
     export pg_database='postgres'
-    export pg_user='austin'
+    export pg_user='postgres'
     export pg_password='password'    
     ```
 
