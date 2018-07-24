@@ -218,7 +218,8 @@ def load_table(table, backfill, new_data_field, from_json_data=None):
 	if backfill:
 		execute_from_file(root_dir+'/sql/'+table+'_ddl.sql')
 	
-	# If the table requires loading from JSON data, load it
+	# If the table requires loading from JSON data ('company', 'prices'), load it
+	# 'orders' table is derived from existing tables, so it does not require loading from JSON
 	if from_json_data != None:
 		# Write parsed JSON data to unlogged Postgres table 
 		json_to_postgres(from_json_data, table)
