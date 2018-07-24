@@ -14,7 +14,7 @@ How to get a copy of the IEX project up and running on your local machine.
 
 ### Prerequisites
 
-+ Download PostgreSQL on your local machine using [Postgres.app](https://postgresapp.com/).
++ Download PostgreSQL on your local machine (e.g. using [Postgres.app](https://postgresapp.com/)).
 
 + Create a new database (or use the default, `postgres`) and specify your username and password. Default username for `postgres` is `postgres`, with no password.
 
